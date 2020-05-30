@@ -1,11 +1,10 @@
-from entities.base import Base
 from sqlalchemy import Column, String, Integer, Date, Enum as EnumSQL
 from sqlalchemy.orm import relationship
 
+from entities.base import Base
 from entities.enums.locazione import Locazione
 from entities.enums.settore import Settore
 from entities.incidente import Incidente
-from entities.lavoratore import Lavoratore
 
 
 class Infortunio(Base):

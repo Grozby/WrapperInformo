@@ -1,14 +1,14 @@
-from entities.base import Base
-from sqlalchemy import Column, String, Integer, Date, Enum, ForeignKey, Enum as EnumSQL
+from sqlalchemy import Column, String, Integer, ForeignKey
 from sqlalchemy.orm import relationship
 
-from entities.fattore import Fattore
-from entities.enums.stato_infortunio import StatoInfortunio
+from entities.base import Base
+from entities.incidente import Incidente
 
 
 class Lavoratore(Base):
     __tablename__ = 'lavoratori'
-    id = Column(String(16), primary_key=True)
+
+    id = Column(String(16), ForeignKey("incidenti.id", ondelete='CASCADE'),primary_key=True)
 
     # Informazioni lavoratore
     sesso = Column(String(16))
@@ -23,6 +23,3 @@ class Lavoratore(Base):
 
     # One to One
     incidente = relationship("Incidente", back_populates="lavoratore")
-
-
-

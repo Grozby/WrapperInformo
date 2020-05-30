@@ -1,7 +1,7 @@
-from entities.base import Base
-from sqlalchemy import Column, String, Integer, Date, Enum, ForeignKey, Enum as EnumSQL
+from sqlalchemy import Column, String, ForeignKey, Enum as EnumSQL
 from sqlalchemy.orm import relationship
 
+from entities.base import Base
 from entities.enums.determinante_modulatore import DeterminanteModulatore
 from entities.enums.stato_processo import StatoProcesso
 
@@ -23,7 +23,5 @@ class Fattore(Base):
     valutazione_rischi = Column(String(400))
 
     # Many to One
-    incidente_id = Column(String(16), ForeignKey('incidente.id', ondelete='CASCADE'))
+    incidente_id = Column(String(16), ForeignKey('incidenti.id', ondelete='CASCADE'))
     incidente = relationship("Incidente", back_populates="fattori")
-
-

@@ -1,0 +1,13 @@
+{
+  "codiceFattore": 23686,
+  "idTipoFattore": 2,
+  "tipoFattore": "Attività di terzi",
+  "descrizioneFattore": "Scelta di un mezzo non idoneo da parte del Preposto",
+  "detMod": "Determinante",
+  "tipoMod": "",
+  "descrizioneProblSic": "Uso improprio di attrezzatura - Pratica abituale",
+  "confrontoStand": "Legge - 81/08 - 19 e 96",
+  "valRisc": "Fattore insufficientemente valutato",
+  "classificazione": "",
+  "statoProc": "Processo"
+}

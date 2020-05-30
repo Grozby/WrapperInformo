@@ -3,7 +3,9 @@ import sys
 
 import pandas as pd
 
-from entities.infortunio import StatoInfortunio, Locazione, Settore
+from entities.enums.stato_infortunio import StatoInfortunio
+from entities.enums.settore import Settore
+from entities.enums.locazione import Locazione
 from wrapper import Wrapper
 from wrapper_selenium import WrapperInformoSelenium
 
@@ -12,29 +14,9 @@ def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
     wrapper = Wrapper()
-    wrapper.read_dataframe()
-    wrapper.scrape_ids()
-
-    # # Genera lo schema.
-    # Base.metadata.create_all(engine)
-    #
-    # try:
-    #     session = Session()
-    #
-    #     infortunio = wrapper.retrieve_injury_details(
-    #         "11394",
-    #         **{
-    #             "StatoInfortunio": StatoInfortunio["Grave"],
-    #             "Settore": Settore["Metallurgia"],
-    #             "Locazione": Locazione["Centro"]
-    #         }
-    #     )
-    #
-    #     session.add(infortunio)
-    #     session.commit()
-    #     session.close()
-    # except IntegrityError:
-    #     logging.debug('ID already present. ')
+    wrapper.read_ids_dataframe()
+    wrapper.scrape_injuries_ids()
+    wrapper.scrape_injuries_details()
 
 
 if __name__ == "__main__":

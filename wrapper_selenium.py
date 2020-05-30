@@ -14,7 +14,10 @@ from sqlalchemy.exc import IntegrityError
 
 from entities.base import Base, engine, Session
 from entities.fattore import Fattore
-from entities.infortunio import StatoInfortunio, Locazione, Settore, Infortunio
+from entities.infortunio import Infortunio
+from entities.enums.stato_infortunio import StatoInfortunio
+from entities.enums.settore import Settore
+from entities.enums.locazione import Locazione
 from entities.lavoratore import Lavoratore
 from utils import parse_int, parse_date, sleep
 from selenium.webdriver.common.action_chains import ActionChains

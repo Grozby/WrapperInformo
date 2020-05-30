@@ -5,23 +5,31 @@ import re
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import session, Query
 
+from entities.base import Base, engine, Session
+from entities.enums.determinante_modulatore import DeterminanteModulatore
+from entities.enums.stato_processo import StatoProcesso
+from entities.enums.tipo_incidente import TipoIncidente
 from entities.fattore import Fattore
-from entities.infortunio import StatoInfortunio, Locazione, Settore, Infortunio
+from entities.incidente import Incidente
+from entities.infortunio import Infortunio
+from entities.enums.stato_infortunio import StatoInfortunio
+from entities.enums.settore import Settore
+from entities.enums.locazione import Locazione
 from entities.lavoratore import Lavoratore
-from utils import sleep, parse_int, parse_date
+from utils import sleep, parse_int, parse_date, get_injury_state, type_incident
 
 
 class Wrapper:
 
     def __init__(self):
-        self.sleep_between_requests: float = 0.2
+        self.sleep_time: float = 0.2
 
         self.factor_json_url = "https://www.inail.it/sol-informo/dettaglioFattore.do"
         self.injury_json_url = "https://www.inail.it/sol-informo/dettagliInfortunio.do"
         self.filters_json_url = "https://www.inail.it/sol-informo/filtra.do"
-
-
 
         self.injury_page_url = "https://www.inail.it/sol-informo/dettaglio.do?codiceInfortunio="
         self.title_before_description_injury_page = "Descrizione della dinamica e dei relativi fattori"
@@ -32,7 +40,7 @@ class Wrapper:
         self.ids_dataframe = None
         self.already_retrieved_combinations = []
 
-    def read_dataframe(self):
+    def read_ids_dataframe(self):
         try:
             self.ids_dataframe = pd.read_pickle(self.path_ids_pickle)
             # Apriamo il dataframe contenente tutti gli ID che abbiamo recuperato. Da qui, estraiamo tutte
@@ -60,10 +68,9 @@ class Wrapper:
             self.create_new_dataframe()
 
     def retrieve_filtered_ids(self,
-                              stato_infortunio: StatoInfortunio,
-                              locazione: Locazione,
-                              settore: Settore):
-
+                              injury_state: StatoInfortunio,
+                              location: Locazione,
+                              sector: Settore):
         ids = []
         last_page = False
         page_number = 1
@@ -71,15 +78,15 @@ class Wrapper:
             "listaFiltri": [
                 {
                     "voce": "Settore Attività",
-                    "codiceAgg": str(settore.value)
+                    "codiceAgg": str(sector.value)
                 },
                 {
                     "voce": "Localizzazioneterritoriale",
-                    "codiceAgg": str(locazione.value)
+                    "codiceAgg": str(location.value)
                 }
             ],
             "dates": [],
-            "tipoEvento": str(stato_infortunio.value),
+            "tipoEvento": str(injury_state.value),
             "numeroPagina": page_number,
             "pericoli": []
         }
@@ -98,14 +105,14 @@ class Wrapper:
             else:
                 last_page = True
 
-            sleep(self.sleep_between_requests)
+            sleep(self.sleep_time)
 
         return ids
 
     def create_new_dataframe(self):
         self.ids_dataframe = pd.DataFrame(columns=["id", "StatoInfortunio", "Locazione", "Settore"])
 
-    def scrape_ids(self):
+    def scrape_injuries_ids(self):
         """
         Per ogni combinazione di tipologia infortunio, Locazione e Settore,
         recuperiamo la lista ID degli infortuni.
@@ -125,9 +132,9 @@ class Wrapper:
             if types in self.already_retrieved_combinations:
                 continue
 
-            ids = self.retrieve_filtered_ids(stato_infortunio=types[0],
-                                             locazione=types[1],
-                                             settore=types[2])
+            ids = self.retrieve_filtered_ids(injury_state=types[0],
+                                             location=types[1],
+                                             sector=types[2])
 
             # Ogni volta che finisce lo scraping per una determinata combinazione,
             # procediamo ad espandere il dataframe e salvare i dati.
@@ -146,49 +153,75 @@ class Wrapper:
                 'Ids per {} - {} - {} aggiunti correttamente.'.format(types[0].name, types[1].name, types[2].name)
             )
 
-    def retrieve_injury_details(self, injury_id, **details):
+    def scrape_injuries_details(self):
+        # Genera lo schema se non presente
+        Base.metadata.create_all(engine)
+
+        # Recuperiamo gli ID degli infortuni contenuti nel database.
+        s = Session()
+        db_injury_ids = list(s.query(Infortunio.id))
+        s.close()
+
+        for index, row in self.ids_dataframe.iterrows():
+            if row["id"] not in db_injury_ids:
+                try:
+                    s = Session()
+                    infortunio = self.retrieve_injury_details(
+                        injury_id=row["id"],
+                        location=Locazione[row["Locazione"]],
+                        sector=Settore[row["Settore"]]
+                    )
+                    s.add(infortunio)
+                    s.commit()
+                    s.close()
+                except IntegrityError as e:
+                    # Idealmente questo errore viene generato quando proviamo ad inserire un ID già esistente.
+                    # Ma, per come è eseguita la procedura, non dovrebbe venire chiamata.
+                    logging.debug('Errore: {}', e)
+
+    logging.debug("Recupero dei dati eseguito correttamente.")
+
+    def retrieve_injury_details(self,
+                                injury_id,
+                                location: Locazione,
+                                sector: Settore):
         """
         Metodo che apre la pagina dell'infortunio specificata da injury_id.
         Questa parte è necessaria per recuperare la descrizione completa,
         più gli ID relativi ai fattori. Con questi ID possiamo poi procedere
         ad eseguire le richieste POST per ottenere i JSON specifici sui
         fattori e sul dettaglio dell'infortunio.
-
-        In details sono contenute:
-            - Locazione
-            - Settore
-            - StatoInfortunio
         """
 
         # Apriamo la pagina corrispondente all'infortunio
-        page = requests.get(
-            'https://www.walmart.com/ip/GoGreen-Power-6-Outlet-Surge-Protector-16103MS-2-5-cord-White/46097919')
-        page = BeautifulSoup(page, 'lxml')
+        page_response = requests.get(self.injury_page_url + str(injury_id))
+        page = BeautifulSoup(page_response.text, 'lxml')
 
-        injury_description = \
-            page.find("h3", string=self.title_before_description_injury_page) \
-                .find_next_sibling() \
-                .get_text() \
-                .strip()
-
-        factors_ids = [tag.get("onclick")[:-1].replace("apriDettagliFattore(", "") for tag in
-                       page.find_all("button", {"onclick": re.compile("apriDettagliFattore\([0-9]{1,6}\)")})]
-
-        factors = []
-        for f_id in factors_ids:
-            factors.append(self.retrieve_factor(f_id))
-            sleep(self.sleep_between_requests)
-
-        response = requests.post(self.injury_json_url, injury_id)
-        response = response.json()
-
+        # Recuperiamo il JSON relativo ai dettagli dell'infortunio.
         # Il JSON è composto da vari JSON Objects, nella quale gran parte dei valori
         # sono ripetuti (Guardare l'esempio in assets).
+        injury_details_response = requests.post(self.injury_json_url, str(injury_id))
+        injury_details_response = injury_details_response.json()
+        sleep(self.sleep_time)
 
-        workers = []
-        for o in response:
-            workers.append(Lavoratore(
-                lavoratore_id=o.get("codiceInfortunato"),
+        # Recuperiamo i tag h3 relativi alle sezioni "Descrizione della dinamica e dei relativi fattori".
+        # Prendendo uno di questi tag e navigando al suo genitore, otterremo la div che contiene tutti i fattori
+        # relativi ad un singolo lavoratore.
+        factors_h3 = page.find_all("h3", string=self.title_before_description_injury_page)
+
+        accidents = []
+
+        for (h3, o) in zip(factors_h3, injury_details_response):
+            incident_description = h3.find_next_sibling().get_text().strip()
+
+            factors_ids = [tag.get("onclick")[:-1].replace("apriDettagliFattore(", "") for tag in
+                           h3.parent.find_all("button", {"onclick": re.compile("apriDettagliFattore\([0-9]{1,6}\)")})]
+            factors = []
+            for f_id in factors_ids:
+                factors.append(self.retrieve_factor(f_id))
+                sleep(self.sleep_time)
+
+            worker = Lavoratore(
                 sesso=o.get("sesso"),
                 nazionalita=o.get("cittadinanza"),
                 tipo_contratto=o.get("rapLav"),
@@ -196,27 +229,35 @@ class Wrapper:
                 anzianita=o.get("anzianita"),
                 numero_addetti_azienda=parse_int(o.get("numAddetti")),
                 attivita_prevalente_azienda=o.get("attPrev"),
+
+            )
+
+            # Lo stato dell'infortunio (Grave o Mortale) lo ricaviamo dai giorni di assenza: per convenzione, se il
+            # i numero di giorni non è specificato, l'incidente è Mortale. Altrimenti, è Grave.
+            accidents.append(Incidente(
+                id=o.get("codiceInfortunato"),
+                lavoratore=worker,
+                fattori=factors,
+                stato_infortunio=get_injury_state(o.get("numeroGiorniAssenza")),
+                descrizione_della_dinamica=incident_description,
+                luogo_infortunio=o.get("luogo"),
+                attivita_lavoratore_durante_infortunio=o.get("tipoAtt"),
+                ambiente=o.get("agente"),
+                tipo_incidente=type_incident(o.get("variazEnergia")),
+                descrizione_incidente=o.get("incidente"),
+                agente_materiale=o.get("agenteMatInc"),
                 sede_lesione=o.get("sedeLesione"),
                 natura_lesione=o.get("naturaLesione"),
                 giorni_assenza_lavoro=parse_int(o.get("numeroGiorniAssenza")),
-                luogo_infortunio=o.get("luogo"),
-                attivita_lavoratore_durante_infortunio=o.get("tipoAtt"),
-                ambiente_infortunio=o.get("agente"),
-                tipo_incidente=o.get("variazEnergia"),
-                incidente=o.get("incidente"),
-                agente_materiale_incidente=o.get("agenteMatInc")
             ))
 
         return Infortunio(
             id=injury_id,
-            stato=StatoInfortunio(details.get("StatoInfortunio")),
-            settore_attivita=Settore(details.get("Settore")),
-            locazione=Locazione(details.get("Locazione")),
-            descrizione=injury_description,
-            data=parse_date(response[0].get("dataInfortunio")),
-            ora_ordinale=parse_int(response[0].get("oraLavoro")),
-            fattori=factors,
-            lavoratori=workers,
+            settore_attivita=Settore(sector),
+            locazione=Locazione(location),
+            data=parse_date(injury_details_response[0].get("dataInfortunio")),
+            ora_ordinale=parse_int(injury_details_response[0].get("oraLavoro")),
+            incidenti=accidents
         )
 
     def retrieve_factor(self, factor_id):
@@ -226,11 +267,11 @@ class Wrapper:
             fattore_id=response.get("codiceFattore"),
             descrizione=response.get("descrizioneFattore"),
             tipologia=response.get("tipoFattore"),
-            determinante_modulatore=response.get("detMod"),
+            determinante_modulatore=DeterminanteModulatore[response.get("detMod")],
             tipo_modulazione=response.get("tipoMod"),
             problema_sicurezza=response.get("descrizioneProblSic"),
             confronto_standard=response.get("confrontoStand"),
             valutazione_rischi=response.get("valRisc"),
-            stato_processo=response.get("statoProc"),
+            stato_processo=StatoProcesso[response.get("statoProc")],
             classificazione=response.get("classificazione")
         )

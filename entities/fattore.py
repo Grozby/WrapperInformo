@@ -17,7 +17,7 @@ class Fattore(Base):
     confronto_standard = Column(String(100))
     valutazione_rischi = Column(String(400))
 
-    infortunio_id = Column(String(16), ForeignKey('infortuni.id', ondelete='CASCADE'))
-    infortunio = relationship("Infortunio", back_populates="fattori")
+    lavoratori_id = Column(String(16), ForeignKey('lavoratori.id', ondelete='CASCADE'))
+    lavoratore = relationship("Lavoratore", back_populates="fattori")
 
 

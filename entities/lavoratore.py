@@ -2,6 +2,8 @@ from entities.base import Base
 from sqlalchemy import Column, String, Integer, Date, Enum, ForeignKey
 from sqlalchemy.orm import relationship
 
+from entities.fattore import Fattore
+
 
 class Lavoratore(Base):
     __tablename__ = 'lavoratori'
@@ -28,6 +30,8 @@ class Lavoratore(Base):
     tipo_incidente = Column(String(400))
     incidente = Column(String(400))
     agente_materiale_incidente = Column(String(400))
+
+    fattori = relationship("Fattore", order_by=Fattore.fattore_id, back_populates="lavoratore")
 
     infortunio_id = Column(String(16), ForeignKey('infortuni.id', ondelete='CASCADE'))
     infortunio = relationship("Infortunio", back_populates="lavoratori")

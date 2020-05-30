@@ -46,5 +46,5 @@ class Infortunio(Base):
     locazione = Column(EnumSQL(Locazione))
     data = Column(Date)
     ora_ordinale = Column(Integer, nullable=True)
-    fattori = relationship("Fattore", order_by=Fattore.fattore_id, back_populates="infortunio")
+
     lavoratori = relationship("Lavoratore", order_by=Lavoratore.lavoratore_id, back_populates="infortunio")

@@ -25,7 +25,8 @@ from utils import sleep, parse_int, parse_date, get_injury_state, type_incident
 class Wrapper:
 
     def __init__(self):
-        self.sleep_time: float = 0.2
+        print("Inizializzazione del wrapper...")
+        self.sleep_time: float = 0.25
 
         self.factor_json_url = "https://www.inail.it/sol-informo/dettaglioFattore.do"
         self.injury_json_url = "https://www.inail.it/sol-informo/dettagliInfortunio.do"
@@ -41,12 +42,11 @@ class Wrapper:
         self.already_retrieved_combinations = []
 
     def read_ids_dataframe(self):
+        print("Lettura del file degli ID...")
         try:
             self.ids_dataframe = pd.read_pickle(self.path_ids_pickle)
             # Apriamo il dataframe contenente tutti gli ID che abbiamo recuperato. Da qui, estraiamo tutte
             # le combinazioni già analizzate di StatoInfortunio, Locazione e Settore.
-            #
-
             self.already_retrieved_combinations = list(
                 map(lambda t: (StatoInfortunio[t[0]], Locazione[t[1]], Settore[t[2]]),
                     list(self.ids_dataframe[["StatoInfortunio", "Locazione", "Settore"]]
@@ -55,16 +55,9 @@ class Wrapper:
                     )
             )
 
-            # wrapper.ids_dataframe = wrapper.ids_dataframe.drop(
-            #     wrapper.ids_dataframe[wrapper.ids_dataframe["Locazione"] == Locazione.SudEIsole.name].index
-            # )
-            # wrapper.ids_dataframe.to_pickle(wrapper.path_ids_pickle)
-            # wrapper.ids_dataframe[(wrapper.ids_dataframe["Locazione"] == Locazione.SudEIsole.name) & (
-            #             wrapper.ids_dataframe["Settore"] == Settore.Metallurgia.name) & (
-            #                                   wrapper.ids_dataframe["StatoInfortunio"] == StatoInfortunio.Grave.name)]
-            print()
+            print("Lettura avvenuta con successo!")
         except FileNotFoundError:
-            logging.debug('Nessun dataframe presente.')
+            print("Nessun dataframe presente.")
             self.create_new_dataframe()
 
     def retrieve_filtered_ids(self,
@@ -124,7 +117,7 @@ class Wrapper:
         Nota: La ricerca nella pagina è fatta con chiamate AJAX per evitare di ri-aggiornare la pagina.
               I filtri non sono passati tramite URL, ma tramite un JSON come session storage.
         """
-
+        print("Inizio scraping degli IDs...")
         for types in itertools.product([si for si in StatoInfortunio],
                                        [lo for lo in Locazione],
                                        [s for s in Settore]):
@@ -149,17 +142,19 @@ class Wrapper:
 
             self.ids_dataframe.to_pickle(self.path_ids_pickle)
             self.ids_dataframe.to_csv(self.path_ids_csv, index=False)
-            logging.debug(
+            print(
                 'Ids per {} - {} - {} aggiunti correttamente.'.format(types[0].name, types[1].name, types[2].name)
             )
+        print("Tutti gli IDs sono stati salvati.")
 
     def scrape_injuries_details(self):
+        print("Scarico le informazioni dei casi trovati...")
         # Genera lo schema se non presente
         Base.metadata.create_all(engine)
 
         # Recuperiamo gli ID degli infortuni contenuti nel database.
         s = Session()
-        db_injury_ids = list(s.query(Infortunio.id))
+        db_injury_ids = list(map(lambda x: int(x.id), list(s.query(Infortunio.id))))
         s.close()
 
         for index, row in self.ids_dataframe.iterrows():
@@ -174,12 +169,13 @@ class Wrapper:
                     s.add(infortunio)
                     s.commit()
                     s.close()
+                    print('ID - {} scaricato correttamente.'.format(row["id"]))
                 except IntegrityError as e:
                     # Idealmente questo errore viene generato quando proviamo ad inserire un ID già esistente.
                     # Ma, per come è eseguita la procedura, non dovrebbe venire chiamata.
                     logging.debug('Errore: {}', e)
 
-    logging.debug("Recupero dei dati eseguito correttamente.")
+    print("Recupero dei dati eseguito correttamente.")
 
     def retrieve_injury_details(self,
                                 injury_id,

@@ -14,7 +14,7 @@ class Fattore(Base):
     descrizione = Column(String(500))
     determinante_modulatore = Column(EnumSQL(DeterminanteModulatore))
     tipo_modulazione = Column(String(100))
-    classificazione = Column(String(100))
+    classificazione = Column(String(200))
     stato_processo = Column(EnumSQL(StatoProcesso))
     tipologia = Column(String(100))
 

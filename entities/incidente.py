@@ -14,7 +14,7 @@ class Incidente(Base):
 
     # Descrizione generale incidente
     stato_infortunio = Column(EnumSQL(StatoInfortunio))
-    descrizione_della_dinamica = Column(String(3000))
+    descrizione_della_dinamica = Column(String(4000))
 
     #
     luogo_infortunio = Column(String(400))

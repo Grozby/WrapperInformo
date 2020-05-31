@@ -42,6 +42,12 @@ class Wrapper:
         self.already_retrieved_combinations = []
 
     def read_ids_dataframe(self):
+        """
+        Metodo che legge il file del dataframe con gli id, se esiste. Se esiste,
+        procediamo a leggerne il contenuto e salvare le combinazioni di id già recuperate
+        in precedenza. Se non esiste, procediamo a creare un dataframe vuoto da riempire.
+
+        """
         print("Lettura del file degli ID...")
         try:
             self.ids_dataframe = pd.read_pickle(self.path_ids_pickle)
@@ -117,6 +123,8 @@ class Wrapper:
         Nota: La ricerca nella pagina è fatta con chiamate AJAX per evitare di ri-aggiornare la pagina.
               I filtri non sono passati tramite URL, ma tramite un JSON come session storage.
         """
+        self.read_ids_dataframe()
+
         print("Inizio scraping degli IDs...")
         for types in itertools.product([si for si in StatoInfortunio],
                                        [lo for lo in Locazione],
